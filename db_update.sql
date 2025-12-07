@@ -253,60 +253,6 @@ SET stock_quantity = (
             AND o.status <> 'Đã Hủy'), 0)
 );
 
-USE `store_management_db`;
-
-DROP TRIGGER IF EXISTS `after_stock_in_update_price`;
-
-DELIMITER $$
-
-CREATE TRIGGER `after_stock_in_update_price`
-AFTER INSERT ON `stock_in_details`
-FOR EACH ROW
-BEGIN
-    DECLARE _product_id VARCHAR(20);
-    DECLARE _old_stock INT DEFAULT 0;
-    DECLARE _current_cost DECIMAL(18,2) DEFAULT 0;
-    DECLARE _new_avg_cost DECIMAL(18,2);
-    DECLARE _total_qty INT;
-
-    -- 1. Tìm product_id từ variant_id vừa nhập
-    SELECT product_id INTO _product_id 
-    FROM product_variants 
-    WHERE variant_id = NEW.variant_id;
-
-    -- 2. Lấy số lượng tồn hiện tại của CẢ SẢN PHẨM (tất cả variants cộng lại)
-    -- Lý do: Giá vốn (cost_price) đang để ở bảng Products (chung cho cả dòng sp)
-    SELECT 
-        IFNULL(SUM(stock_quantity), 0) INTO _old_stock
-    FROM product_variants
-    WHERE product_id = _product_id;
-
-    -- 3. Lấy giá vốn hiện tại
-    SELECT cost_price INTO _current_cost
-    FROM products
-    WHERE product_id = _product_id;
-
-    -- 4. Tính giá vốn mới (Bình quân gia quyền)
-    -- Công thức: ((Tồn cũ * Giá cũ) + (Nhập mới * Giá mới)) / (Tồn cũ + Nhập mới)
-    SET _total_qty = _old_stock + NEW.quantity;
-    
-    IF _total_qty > 0 THEN
-        SET _new_avg_cost = ((_old_stock * _current_cost) + (NEW.quantity * NEW.cost_price)) / _total_qty;
-        
-        -- 5. Cập nhật lại giá vốn mới vào bảng products
-        UPDATE products 
-        SET cost_price = _new_avg_cost 
-        WHERE product_id = _product_id;
-    END IF;
-
-    -- 6. Cập nhật luôn số lượng tồn kho vào bảng variant
-    UPDATE product_variants
-    SET stock_quantity = stock_quantity + NEW.quantity
-    WHERE variant_id = NEW.variant_id;
-
-END$$
-
-DELIMITER ;
 
 -- 3. Kiểm tra lại kết quả (Sẽ thấy chênh lệch về 0 hoặc rất nhỏ)
 SELECT 'Đã cập nhật xong dữ liệu!' AS Thong_Bao;
@@ -1543,7 +1489,184 @@ INSERT INTO product_variants (variant_id, product_id, color, size, stock_quantit
 ('V068_1', 'P068', 'Trắng', '1m', 80, 0), ('V068_2', 'P068', 'Trắng', '2m', 60, 20000), ('V068_3', 'P068', 'Đen', '1m', 80, 0),
 ('V069_1', 'P069', 'Trắng', 'Freesize', 40, 0), ('V069_2', 'P069', 'Đen', 'Freesize', 40, 0),
 ('V070_1', 'P070', 'Đen', '10000mAh', 30, 0), ('V070_2', 'P070', 'Trắng', '20000mAh', 20, 100000), ('V070_3', 'P070', 'Hồng', '10000mAh', 30, 0);
+INSERT INTO orders (order_id, customer_id, order_date, completed_date, order_channel, direct_delivery, subtotal, shipping_cost, final_total, status, payment_status, payment_method, staff_id, delivery_staff_id) VALUES
+-- Bù tháng 01/2025 (Hiện tại ~130tr -> Cần thêm ~25tr)
+('ORD045','CUS01','2025-01-28 09:00:00','2025-01-28 10:00:00','Trực tiếp',TRUE, 25000000, 0, 25000000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','SALE01',NULL),
 
+-- Bù tháng 02/2025 (Hiện tại ~110tr -> Cần thêm ~45tr)
+('ORD046','CUS02','2025-02-25 14:00:00','2025-02-26 10:00:00','Online',FALSE, 32000000, 50000, 32050000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS01','SHIP01'),
+('ORD047','CUS03','2025-02-27 16:00:00',NULL,'Trực tiếp',TRUE, 15000000, 0, 15000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL),
+
+-- Bù tháng 03/2025 (Hiện tại ~105tr -> Cần thêm ~50tr)
+('ORD048','CUS04','2025-03-25 10:00:00','2025-03-26 15:00:00','Online',FALSE, 35000000, 50000, 35050000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS02','SHIP02'),
+('ORD049','CUS05','2025-03-28 09:30:00',NULL,'Trực tiếp',TRUE, 18000000, 0, 18000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE01',NULL),
+
+-- Bù tháng 04/2025 (Hiện tại ~110tr -> Cần thêm ~45tr)
+('ORD050','CUS06','2025-04-25 11:00:00','2025-04-26 14:00:00','Online',FALSE, 30000000, 40000, 30040000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS03','SHIP03'),
+('ORD051','CUS07','2025-04-28 15:00:00',NULL,'Trực tiếp',TRUE, 16000000, 0, 16000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL),
+
+-- Bù tháng 05/2025 (Hiện tại ~120tr -> Cần thêm ~35tr)
+('ORD052','CUS08','2025-05-25 13:00:00','2025-05-26 09:00:00','Online',FALSE, 35000000, 50000, 35050000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS01','SHIP01'),
+
+-- Bù tháng 06/2025 (Hiện tại ~115tr -> Cần thêm ~40tr)
+('ORD053','CUS09','2025-06-25 14:00:00','2025-06-26 16:00:00','Online',FALSE, 28000000, 40000, 28040000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS02','SHIP02'),
+('ORD054','CUS10','2025-06-28 10:00:00',NULL,'Trực tiếp',TRUE, 15000000, 0, 15000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE01',NULL),
+
+-- Bù tháng 07/2025 (Hiện tại ~105tr -> Cần thêm ~50tr)
+('ORD055','CUS11','2025-07-25 09:30:00','2025-07-26 11:00:00','Online',FALSE, 32000000, 50000, 32050000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS03','SHIP03'),
+('ORD056','CUS12','2025-07-29 16:00:00',NULL,'Trực tiếp',TRUE, 20000000, 0, 20000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL),
+
+-- Bù tháng 08/2025 (Hiện tại ~120tr -> Cần thêm ~35tr)
+('ORD057','CUS13','2025-08-25 10:00:00','2025-08-26 14:00:00','Online',FALSE, 35000000, 50000, 35050000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS01','SHIP01'),
+
+-- Bù tháng 09/2025 (Hiện tại ~125tr -> Cần thêm ~30tr)
+('ORD058','CUS14','2025-09-25 15:00:00','2025-09-26 10:00:00','Online',FALSE, 30000000, 40000, 30040000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS02','SHIP02'),
+
+-- Bù tháng 10/2025 (Hiện tại ~110tr -> Cần thêm ~45tr)
+('ORD059','CUS15','2025-10-25 09:00:00','2025-10-26 11:00:00','Online',FALSE, 30000000, 50000, 30050000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS03','SHIP03'),
+('ORD060','CUS16','2025-10-28 14:00:00',NULL,'Trực tiếp',TRUE, 18000000, 0, 18000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE01',NULL),
+
+-- Bù tháng 11/2025 (Hiện tại ~115tr -> Cần thêm ~40tr)
+('ORD061','CUS17','2025-11-25 10:30:00','2025-11-26 15:00:00','Online',FALSE, 30000000, 40000, 30040000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS01','SHIP01'),
+('ORD062','CUS18','2025-11-28 16:30:00',NULL,'Trực tiếp',TRUE, 12000000, 0, 12000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL);
+
+INSERT INTO order_details (order_id, variant_id, quantity, price_at_order) VALUES
+-- ORD045 (25 Triệu - Tháng 1)
+('ORD045','V086_1', 10, 2500000), -- 10 đôi Nike AF1 (25tr) - Kho còn nhiều từ SI0016
+
+-- ORD046 (32 Triệu - Tháng 2)
+('ORD046','V042_1', 10, 3200000), -- 10 chai Chanel Bleu (32tr) - Kho SI0036/SI0014
+
+-- ORD047 (15 Triệu - Tháng 2)
+('ORD047','V087_1', 5, 3000000),  -- 5 đôi Adidas Boost (15tr)
+
+-- ORD048 (35 Triệu - Tháng 3)
+('ORD048','V086_1', 10, 2500000), -- 10 Nike AF1 (25tr)
+('ORD048','V060_2', 5, 2000000),  -- 5 Vali xịn (10tr)
+
+-- ORD049 (18 Triệu - Tháng 3)
+('ORD049','V089_1', 10, 1800000), -- 10 đôi MLB (18tr)
+
+-- ORD050 (30 Triệu - Tháng 4)
+('ORD050','V041_1', 12, 2500000), -- 12 GoodGirl (30tr)
+
+-- ORD051 (16 Triệu - Tháng 4)
+('ORD051','V042_1', 5, 3200000),  -- 5 Chanel Bleu (16tr)
+
+-- ORD052 (35 Triệu - Tháng 5)
+('ORD052','V087_1', 10, 3000000), -- 10 Adidas Boost (30tr)
+('ORD052','V025_1', 10, 500000),  -- 10 Ví da (5tr)
+
+-- ORD053 (28 Triệu - Tháng 6)
+('ORD053','V086_1', 10, 2500000), -- 10 Nike AF1 (25tr)
+('ORD053','V066_1', 3, 1000000),  -- 3 Ốp lưng UAG (3tr)
+
+-- ORD054 (15 Triệu - Tháng 6)
+('ORD054','V089_1', 5, 1800000),  -- 5 MLB (9tr)
+('ORD054','V060_1', 5, 1200000),  -- 5 Vali thường (6tr)
+
+-- ORD055 (32 Triệu - Tháng 7)
+('ORD055','V042_1', 10, 3200000), -- 10 Chanel Bleu (32tr)
+
+-- ORD056 (20 Triệu - Tháng 7)
+('ORD056','V005_1', 20, 1000000), -- 20 Áo Blazer (20tr)
+
+-- ORD057 (35 Triệu - Tháng 8)
+('ORD057','V087_1', 10, 3000000), -- 10 Adidas Boost (30tr)
+('ORD057','V022_1', 10, 500000),  -- 10 Mũ (5tr)
+
+-- ORD058 (30 Triệu - Tháng 9)
+('ORD058','V086_1', 12, 2500000), -- 12 Nike AF1 (30tr)
+
+-- ORD059 (30 Triệu - Tháng 10)
+('ORD059','V041_1', 12, 2500000), -- 12 GoodGirl (30tr)
+
+-- ORD060 (18 Triệu - Tháng 10)
+('ORD060','V089_1', 10, 1800000), -- 10 MLB (18tr)
+
+-- ORD061 (30 Triệu - Tháng 11)
+('ORD061','V087_1', 10, 3000000), -- 10 Adidas Boost (30tr)
+
+-- ORD062 (12 Triệu - Tháng 11)
+('ORD062','V060_2', 10, 1200000); -- 10 Vali xanh (12tr)
+-- =================================================================
+-- GÓI KÍCH CẦU: ĐẨY DOANH THU VƯỢT MỐC 200 TRIỆU (TỪ T1/2025 - T11/2025)
+-- =================================================================
+
+INSERT INTO orders (order_id, customer_id, order_date, completed_date, order_channel, direct_delivery, subtotal, shipping_cost, final_total, status, payment_status, payment_method, staff_id, delivery_staff_id) VALUES
+-- Tháng 01/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD063','CUS30','2025-01-30 14:00:00','2025-01-31 09:00:00','Online',FALSE, 60000000, 100000, 60100000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS01','SHIP01'),
+
+-- Tháng 02/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD064','CUS31','2025-02-28 10:00:00','2025-02-28 12:00:00','Trực tiếp',TRUE, 64000000, 0, 64000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE01',NULL),
+
+-- Tháng 03/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD065','CUS32','2025-03-30 09:30:00','2025-03-31 15:00:00','Online',FALSE, 55000000, 50000, 55050000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS02','SHIP02'),
+
+-- Tháng 04/2025 (Gốc ~156tr -> Cần thêm ~50tr)
+('ORD066','CUS33','2025-04-30 08:00:00','2025-05-01 10:00:00','Online',FALSE, 58000000, 50000, 58050000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS03','SHIP03'),
+
+-- Tháng 05/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD067','CUS34','2025-05-30 11:00:00','2025-05-30 13:00:00','Trực tiếp',TRUE, 60000000, 0, 60000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL),
+
+-- Tháng 06/2025 (Gốc ~158tr -> Cần thêm ~50tr)
+('ORD068','CUS35','2025-06-29 15:00:00','2025-06-30 11:00:00','Online',FALSE, 55000000, 40000, 55040000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS01','SHIP01'),
+
+-- Tháng 07/2025 (Gốc ~157tr -> Cần thêm ~50tr)
+('ORD069','CUS36','2025-07-30 16:30:00',NULL,'Trực tiếp',TRUE, 62000000, 0, 62000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE01',NULL),
+
+-- Tháng 08/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD070','CUS37','2025-08-30 09:00:00','2025-08-31 14:00:00','Online',FALSE, 58000000, 50000, 58050000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS02','SHIP02'),
+
+-- Tháng 09/2025 (Gốc ~155tr -> Cần thêm ~50tr)
+('ORD071','CUS38','2025-09-29 10:30:00','2025-09-30 09:00:00','Online',FALSE, 60000000, 50000, 60050000, 'Hoàn Thành','Đã Thanh Toán','Thẻ tín dụng','OS03','SHIP03'),
+
+-- Tháng 10/2025 (Gốc ~158tr -> Cần thêm ~50tr)
+('ORD072','CUS39','2025-10-30 14:00:00','2025-10-30 16:00:00','Trực tiếp',TRUE, 55000000, 0, 55000000, 'Hoàn Thành','Đã Thanh Toán','Tiền mặt','SALE02',NULL),
+
+-- Tháng 11/2025 (Gốc ~157tr -> Cần thêm ~50tr)
+('ORD073','CUS40','2025-11-29 11:00:00','2025-11-30 15:00:00','Online',FALSE, 65000000, 60000, 65060000, 'Hoàn Thành','Đã Thanh Toán','Chuyển khoản','OS01','SHIP01');
+
+-- CHI TIẾT ĐƠN HÀNG (Sử dụng hàng tồn kho số lượng lớn: Giày hiệu & Nước hoa)
+INSERT INTO order_details (order_id, variant_id, quantity, price_at_order) VALUES
+-- ORD063 (60 Triệu - T1): Đơn sỉ Giày Adidas Boost (Kho nhập hàng trăm đôi)
+('ORD063','V087_1', 20, 3000000), -- 20 đôi x 3tr
+
+-- ORD064 (64 Triệu - T2): Đơn sỉ Nước hoa Chanel (Kho nhập nhiều tháng 12/24)
+('ORD064','V042_1', 20, 3200000), -- 20 chai x 3.2tr
+
+-- ORD065 (55 Triệu - T3): Đơn sỉ Giày Nike AF1 (Kho nhập nhiều tháng 1)
+('ORD065','V086_1', 22, 2500000), -- 22 đôi x 2.5tr
+
+-- ORD066 (58 Triệu - T4): Combo Giày + Nước hoa
+('ORD066','V087_1', 10, 3000000), -- 10 đôi Boost (30tr)
+('ORD066','V041_1', 11, 2500000), -- 11 GoodGirl (27.5tr) + Lẻ
+
+-- ORD067 (60 Triệu - T5): Đơn sỉ Nike AF1
+('ORD067','V086_1', 24, 2500000), -- 24 đôi x 2.5tr
+
+-- ORD068 (55 Triệu - T6): Combo Nước hoa + Vali
+('ORD068','V042_1', 15, 3200000), -- 15 Chanel (48tr)
+('ORD068','V060_2', 3, 2333000),  -- 3 Vali xịn (7tr)
+
+-- ORD069 (62 Triệu - T7): Đơn sỉ Adidas Boost
+('ORD069','V087_1', 20, 3000000), -- 20 đôi x 3tr
+('ORD069','V022_1', 4, 500000),   -- 4 Mũ (2tr)
+
+-- ORD070 (58 Triệu - T8): Đơn sỉ Nước hoa GoodGirl
+('ORD070','V041_1', 23, 2500000), -- 23 chai (57.5tr)
+('ORD070','V026_1', 2, 250000),   -- 2 Son (0.5tr)
+
+-- ORD071 (60 Triệu - T9): Đơn sỉ Nike AF1
+('ORD071','V086_1', 24, 2500000), -- 24 đôi (60tr)
+
+-- ORD072 (55 Triệu - T10): Combo Giày + Mỹ phẩm cao cấp
+('ORD072','V089_1', 20, 1800000), -- 20 đôi MLB (36tr)
+('ORD072','V032_2', 22, 863636),  -- 22 Toner Kiehl (19tr)
+
+-- ORD073 (65 Triệu - T11): Đơn sỉ Chanel Bleu
+('ORD073','V042_1', 20, 3200000), -- 20 chai (64tr)
+('ORD073','V066_1', 1, 1000000);  -- 1 Ốp (1tr)
 INSERT INTO product_images (product_id, color, image_url, sort_order) VALUES
 -- P001: Đầm Maxi
 ('P001', 'Trắng', 'https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=500', 1),
@@ -2006,8 +2129,7 @@ SET stock_quantity = (
 
 SET SQL_SAFE_UPDATES = 1;
 SELECT 'Đã hoàn tất cân bằng dữ liệu!' AS Message;
--- 2. Cập nhật dữ liệu tên cho tài khoản OS01 (để đăng nhập không bị lỗi hiển thị)
-DROP TRIGGER IF EXISTS `after_stock_in_update_price`;
+
 SET SQL_SAFE_UPDATES = 1;
 SET FOREIGN_KEY_CHECKS = 1;
 

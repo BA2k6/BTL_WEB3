@@ -85,11 +85,23 @@ export const OrdersScreen = ({ setPath, currentUserId, userRoleName }) => {
 
     const handleViewDetails = async (orderId) => {
         try {
-            const data = await getOrderById(orderId); 
+            const data = await getOrderById(orderId);
+            console.log('[OrdersScreen] getOrderById response:', data);
+            if (!data) throw new Error('Không nhận được dữ liệu chi tiết đơn hàng từ server.');
+
+            // Bảo vệ: đảm bảo items luôn là mảng để tránh lỗi khi render
+            if (!data.items) {
+                data.items = [];
+            } else if (!Array.isArray(data.items)) {
+                data.items = [data.items];
+            }
+
             setOrderDetails(data);
             setShowDetails(true);
         } catch (err) {
-            alert("Lỗi tải chi tiết đơn hàng: " + err.message);
+            console.error('Lỗi tải chi tiết đơn hàng:', err);
+            const message = err?.message || err?.response?.data?.message || JSON.stringify(err);
+            alert("Lỗi tải chi tiết đơn hàng: " + message);
         }
     };
     
@@ -320,16 +332,21 @@ export const OrdersScreen = ({ setPath, currentUserId, userRoleName }) => {
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                             <div className="p-4 bg-white rounded border">
-                                <p className="text-sm text-gray-600">Lương tạm (Subtotal)</p>
-                                <p className="font-semibold">{Number(orderDetails.subtotal || orderDetails.subTotal || 0).toLocaleString()} đ</p>
+                                <p className="text-sm text-gray-600">Tổng tiền hàng (Subtotal)</p>
+                                <p className="font-semibold">{(orderDetails.items ? orderDetails.items.reduce((acc, it) => {
+                                    const qty = parseFloat(it.quantity) || 0;
+                                    const price = parseFloat(it.price_at_order) || 0;
+                                    const itemTotal = it.itemTotal ? parseFloat(it.itemTotal) : qty * price;
+                                    return acc + itemTotal;
+                                }, 0) : 0).toLocaleString('vi-VN')} đ</p>
                             </div>
                             <div className="p-4 bg-white rounded border">
                                 <p className="text-sm text-gray-600">Phí giao hàng</p>
-                                <p className="font-semibold">{Number(orderDetails.shipping_cost || orderDetails.shippingCost || 0).toLocaleString()} đ</p>
+                                <p className="font-semibold">{(parseFloat(orderDetails.shipping_cost || orderDetails.shippingCost || 0)).toLocaleString('vi-VN')} đ</p>
                             </div>
                             <div className="p-4 bg-white rounded border">
                                 <p className="text-sm text-gray-600">Tổng thanh toán</p>
-                                <p className="font-semibold text-red-600">{Number(orderDetails.totalAmount || orderDetails.finalTotal || 0).toLocaleString()} đ</p>
+                                <p className="font-semibold text-red-600">{(parseFloat(orderDetails.totalAmount || orderDetails.finalTotal || 0)).toLocaleString('vi-VN')} đ</p>
                             </div>
                         </div>
 
@@ -352,15 +369,20 @@ export const OrdersScreen = ({ setPath, currentUserId, userRoleName }) => {
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-100">
-                                    {orderDetails.items && orderDetails.items.map((item, idx) => (
-                                        <tr key={idx}>
-                                            <td className="px-4 py-2 text-sm">{item.product_name}</td>
-                                            <td className="px-4 py-2 text-sm">{item.color || '-'} / {item.size || '-'}</td>
-                                            <td className="px-4 py-2 text-right text-sm">{item.quantity}</td>
-                                            <td className="px-4 py-2 text-right text-sm">{Number(item.price_at_order).toLocaleString()} đ</td>
-                                            <td className="px-4 py-2 text-right text-sm">{Number(item.itemTotal || (item.quantity * item.price_at_order)).toLocaleString()} đ</td>
-                                        </tr>
-                                    ))}
+                                    {orderDetails.items && orderDetails.items.length > 0 ? orderDetails.items.map((item, idx) => {
+                                        const qty = parseFloat(item.quantity) || 0;
+                                        const price = parseFloat(item.price_at_order) || 0;
+                                        const itemTotal = item.itemTotal ? parseFloat(item.itemTotal) : qty * price;
+                                        return (
+                                            <tr key={idx}>
+                                                <td className="px-4 py-2 text-sm">{item.product_name || 'N/A'}</td>
+                                                <td className="px-4 py-2 text-sm">{item.color || '-'} / {item.size || '-'}</td>
+                                                <td className="px-4 py-2 text-right text-sm">{qty}</td>
+                                                <td className="px-4 py-2 text-right text-sm">{price.toLocaleString('vi-VN')} đ</td>
+                                                <td className="px-4 py-2 text-right text-sm">{itemTotal.toLocaleString('vi-VN')} đ</td>
+                                            </tr>
+                                        );
+                                    }) : <tr><td colSpan="5" className="px-4 py-2 text-center text-sm text-gray-500">Không có sản phẩm nào</td></tr>}
                                 </tbody>
                             </table>
                         </div>
