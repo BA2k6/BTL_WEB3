@@ -127,9 +127,18 @@ const orderController = {
             // Chuẩn hóa kênh và phương thức thanh toán để tránh lỗi cột ENUM/độ dài
             const normStr = (v) => (v || '').toString().trim();
             const safeChannel = normStr(orderChannel).slice(0, 20) || 'Online';
+
+            // Map mã thanh toán từ client (COD/CARD/BANK) sang enum tiếng Việt trong DB
             const pmRaw = normStr(paymentMethod).toUpperCase();
-            const allowedPM = ['COD', 'CASH', 'CARD', 'BANK', 'BANKING', 'TRANSFER'];
-            const safePayment = allowedPM.includes(pmRaw) ? pmRaw : 'COD';
+            const paymentMap = {
+                COD: 'Tiền mặt',
+                CASH: 'Tiền mặt',
+                CARD: 'Thẻ tín dụng',
+                BANK: 'Chuyển khoản',
+                BANKING: 'Chuyển khoản',
+                TRANSFER: 'Chuyển khoản',
+            };
+            const safePayment = paymentMap[pmRaw] || 'Tiền mặt';
 
             // 4. INSERT vào orders
             await conn.query(
