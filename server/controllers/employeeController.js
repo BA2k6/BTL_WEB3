@@ -16,6 +16,30 @@ const employeeController = {
         }
     },
 
+    // 1.5 Lấy employee_id từ user_id
+    getEmployeeByUserId: async (req, res) => {
+        try {
+            const { userId } = req.params;
+            if (!userId) {
+                return res.status(400).json({ message: 'Thiếu user_id.' });
+            }
+
+            const [rows] = await db.query(
+                `SELECT employee_id FROM employees WHERE user_id = ?`,
+                [userId]
+            );
+
+            if (rows.length === 0) {
+                return res.status(404).json({ message: 'Không tìm thấy nhân viên cho user này.', employeeId: null });
+            }
+
+            res.status(200).json({ employeeId: rows[0].employee_id });
+        } catch (error) {
+            console.error("Get Employee by User Error:", error);
+            res.status(500).json({ message: 'Lỗi server.' });
+        }
+    },
+
     // 2. Tạo nhân viên mới (ĐÃ SỬA: LẤY EMP ID TỪ FRONTEND)
     createEmployee: async (req, res) => {
         try {

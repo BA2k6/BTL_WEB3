@@ -10,11 +10,10 @@ const stockInModel = {
                 DATE_FORMAT(si.import_date, '%Y-%m-%d %H:%i') AS importDate, 
                 si.total_cost AS totalCost, 
                 
-                -- [FIX QUAN TRỌNG] Lấy thẳng giá trị đang lưu trong cột user_id ra
-                -- Vì trong dữ liệu mẫu cột này đang lưu 'WH01'
-                si.user_id AS rawUserId,
+                -- Lấy mã nhân viên từ cột user_id
+                si.user_id AS staffCode,
                 
-                -- Vẫn giữ logic lấy tên để hiển thị phụ nếu cần
+                -- Lấy tên nhân viên để hiển thị phụ nếu cần
                 COALESCE(e.full_name, u.username) AS staffName
             FROM stock_in si
             LEFT JOIN users u ON si.user_id = u.user_id
@@ -54,28 +53,74 @@ const stockInModel = {
         try {
             await connection.beginTransaction();
 
-            // [LOGIC] Với form mới, ta lưu thẳng mã nhân viên vào user_id
-            // Để khi hiển thị lại nó khớp với dữ liệu cũ
-            const finalUserId = inputId; 
-
-            // Kiểm tra user có tồn tại không để tránh lỗi DB
-            // Logic: UserID phải tồn tại trong bảng users HOẶC employees
-            const [check] = await connection.query(`
-                SELECT 1 FROM users WHERE user_id = ? 
-                UNION 
-                SELECT 1 FROM employees WHERE employee_id = ?
-            `, [finalUserId, finalUserId]);
+            // [LOGIC] inputId là employee_id (VD: WH01) hoặc "OWNER"
+            // Cần lấy user_id tương ứng từ bảng employees
+            let finalUserId = inputId;
             
-            // Nếu bạn muốn tắt kiểm tra chặt chẽ để nhập thoải mái thì comment dòng if dưới này lại
+            // Kiểm tra nếu inputId là "OWNER", sử dụng "OWNER" làm user_id
+            if (inputId === 'OWNER') {
+                finalUserId = 'OWNER';
+            } else {
+                // Kiểm tra nếu inputId là employee_id, lấy user_id từ employees
+                const [empCheck] = await connection.query(`
+                    SELECT user_id FROM employees WHERE employee_id = ?
+                `, [inputId]);
+                
+                if (empCheck.length > 0) {
+                    finalUserId = empCheck[0].user_id; // Lấy user_id từ employees
+                } else {
+                    // Nếu không tìm thấy employee, giả sử inputId đã là user_id
+                    finalUserId = inputId;
+                }
+            }
+
+            // Kiểm tra user có tồn tại không
+            const [check] = await connection.query(`
+                SELECT 1 FROM users WHERE user_id = ?
+            `, [finalUserId]);
+            
+            // Nếu user chưa tồn tại, tạo user ảo
             if (check.length === 0) {
-                 // Tự động tạo user ảo nếu chưa có để không bị lỗi Foreign Key (Chữa cháy cho dữ liệu mẫu)
-                 await connection.query("INSERT IGNORE INTO users (user_id, username, password_hash, role_id) VALUES (?, ?, '123', 3)", [finalUserId, finalUserId]);
+                 try {
+                     await connection.query(
+                        `INSERT INTO users (user_id, username, password_hash, role_id, status) 
+                         VALUES (?, ?, SHA2('123456', 256), 3, 'Active')`,
+                        [finalUserId, finalUserId]
+                     );
+                 } catch (err) {
+                     console.log(`User ${finalUserId} already exists or cannot be created`);
+                 }
             }
 
             // B. Tạo hoặc Cập nhật Phiếu
             let stockInId = providedId;
             if (!stockInId) {
-                 stockInId = `SI${Date.now().toString().slice(-8)}`; 
+                 // Lấy tất cả mã phiếu từ database
+                 const [allReceipts] = await connection.query(`
+                    SELECT stock_in_id FROM stock_in WHERE stock_in_id LIKE 'SI%' ORDER BY stock_in_id
+                 `);
+                 
+                 // Parse từ JavaScript để chắc chắn chỉ lấy format SI####
+                 let maxNum = 0;
+                 for (const receipt of allReceipts) {
+                    const match = receipt.stock_in_id.match(/^SI(\d{4})$/);
+                    if (match) {
+                        const num = parseInt(match[1], 10);
+                        if (num > maxNum) {
+                            maxNum = num;
+                        }
+                    }
+                 }
+                 
+                 let nextNum = maxNum + 1;
+                 
+                 // Kiểm tra không vượt quá SI9999
+                 if (nextNum > 9999) {
+                    throw new Error('Đã tạo quá nhiều phiếu nhập (SI9999)');
+                 }
+                 
+                 stockInId = `SI${nextNum.toString().padStart(4, '0')}`; // SI0001, SI0002, ..., SI9999
+                 
                  await connection.query(
                     `INSERT INTO stock_in (stock_in_id, supplier_name, import_date, total_cost, user_id)
                      VALUES (?, ?, NOW(), 0, ?)`,
@@ -173,6 +218,39 @@ const stockInModel = {
 
             await connection.commit();
             return { success: true };
+        } catch (error) {
+            await connection.rollback();
+            throw error;
+        } finally {
+            connection.release();
+        }
+    },
+
+    // 6. Xóa phiếu nhập (toàn bộ phiếu + chi tiết)
+    deleteStockInReceipt: async (stockInId) => {
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+
+            // Xóa chi tiết phiếu trước
+            await connection.query(
+                'DELETE FROM stock_in_details WHERE stock_in_id = ?',
+                [stockInId]
+            );
+
+            // Xóa phiếu master
+            const [result] = await connection.query(
+                'DELETE FROM stock_in WHERE stock_in_id = ?',
+                [stockInId]
+            );
+
+            if (result.affectedRows === 0) {
+                throw new Error(`Phiếu nhập ${stockInId} không tồn tại.`);
+            }
+
+            await connection.commit();
+            return { success: true };
+
         } catch (error) {
             await connection.rollback();
             throw error;

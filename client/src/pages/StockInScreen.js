@@ -2,16 +2,18 @@ import React, { useState, useEffect, useMemo } from "react";
 import { Search, Plus, Eye, Edit3, Trash2, Package, FileText, TrendingUp, RefreshCw, X, User, Truck, Save } from "lucide-react";
 import api from "../services/api";
 import ProductFormModal from '../components/ProductFormModal';
+import ActionMenu from '../components/ActionMenu';
 
 const StockInScreen = () => {
   const [receipts, setReceipts] = useState([]);
   const [variants, setVariants] = useState([]);
+  const [employees, setEmployees] = useState([]); // Danh sách nhân viên
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // State lưu mã nhân viên tự động
-  const [currentUserCode, setCurrentUserCode] = useState("WH01"); // Mặc định là WH01 để không bị rỗng
+  const [currentUserCode, setCurrentUserCode] = useState(""); // Để trống ban đầu
 
   // Modal State
   const [showAddModal, setShowAddModal] = useState(false);
@@ -39,20 +41,42 @@ const StockInScreen = () => {
 
   useEffect(() => {
     loadData();
+    fetchEmployees();
     
-    // --- LOGIC LẤY USER ---
-    const userStr = localStorage.getItem('user');
-    if (userStr) {
-        try {
-            const user = JSON.parse(userStr);
-            // Ưu tiên lấy employeeId, nếu không có thì lấy userId, không có nữa thì lấy username
-            const code = user.role_id === 1 ? 'OWNER' : (user.employeeId || user.id || user.username || 'WH01'); 
-            setCurrentUserCode(code);
-        } catch (e) {
-            console.error(e);
+    // --- LOGIC LẤY EMPLOYEE_ID TỪ USER ---
+    const fetchEmployeeId = async () => {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            try {
+                const user = JSON.parse(userStr);
+                const userId = user.userId;
+                
+                // Gọi API để lấy employee_id từ user_id
+                try {
+                    const res = await api.get(`/employees/by-user/${userId}`);
+                    if (res.data?.employeeId) {
+                        setCurrentUserCode(res.data.employeeId);
+                    }
+                } catch (err) {
+                    console.log('User này không có employee_id');
+                }
+            } catch (e) {
+                console.error('Lỗi parse user:', e);
+            }
         }
-    }
+    };
+    
+    fetchEmployeeId();
   }, []);
+
+  const fetchEmployees = async () => {
+    try {
+      const res = await api.get("/employees");
+      setEmployees(res.data || []);
+    } catch (err) {
+      console.error("Lỗi tải danh sách nhân viên:", err);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -71,7 +95,7 @@ const StockInScreen = () => {
     setFormMaster({ 
         stockInId: "", 
         supplierName: "", 
-        employeeId: currentUserCode, // Tự động điền
+        employeeId: currentUserCode, // Lấy từ currentUserCode (employee_id)
         note: "" 
     });
     setFormDetail({ variantId: "", quantity: "", priceImport: "" });
@@ -172,6 +196,18 @@ const StockInScreen = () => {
       } catch (err) { alert("Lỗi xóa"); }
   }
 
+  const handleDeleteReceipt = async (receiptId) => {
+      if(!window.confirm("Bạn chắc chắn muốn xóa phiếu nhập này? Hành động này không thể hoàn tác.")) return;
+      try {
+          await api.delete(`/stockin/${receiptId}`);
+          alert("Xóa phiếu thành công!");
+          setShowDetailModal(false);
+          loadData();
+      } catch (err) { 
+          alert(err.response?.data?.message || "Lỗi xóa phiếu");
+      }
+  }
+
   const filteredReceipts = useMemo(() => {
     const q = search.toLowerCase();
     return receipts.filter(r => r.id.toLowerCase().includes(q) || r.supplierName.toLowerCase().includes(q));
@@ -214,7 +250,17 @@ const StockInScreen = () => {
                 {/* HIỂN THỊ MÃ NV */}
                 <td className="px-6 py-4 text-sm"><span className="bg-gray-100 px-2 py-1 rounded font-bold text-gray-700">{r.staffCode || r.staffName || r.userId || '---'}</span></td>
                 
-                <td className="px-6 py-4 text-right font-bold">{Number(r.totalCost).toLocaleString()} đ</td><td className="px-6 py-4 flex justify-center gap-2"><button onClick={() => handleViewDetail(r)} className="p-2 text-blue-600 bg-blue-50 rounded-lg"><Eye size={18}/></button><button onClick={() => handleEditReceipt(r)} className="p-2 text-orange-600 bg-orange-50 rounded-lg"><Edit3 size={18}/></button></td></tr>
+                <td className="px-6 py-4 text-right font-bold">{Number(r.totalCost).toLocaleString()} đ</td>
+                <td className="px-6 py-4 text-right">
+                  <ActionMenu
+                    buttonLabel="⋯"
+                    items={[
+                      { label: 'Xem chi tiết', onClick: () => handleViewDetail(r) },
+                      { label: 'Chỉnh sửa', onClick: () => handleEditReceipt(r) },
+                      { label: 'Xóa', onClick: () => handleDeleteReceipt(r.id), danger: true }
+                    ]}
+                  />
+                </td></tr>
             ))}</tbody></table>
         </div>
       </div>
@@ -228,18 +274,23 @@ const StockInScreen = () => {
                         <div><label className="text-xs font-bold uppercase block mb-1">Mã Phiếu</label><input type="text" value={formMaster.stockInId} disabled placeholder="Tự động" className="w-full px-3 py-2 bg-gray-200 rounded-lg font-mono text-sm"/></div>
                         <div><label className="text-xs font-bold uppercase block mb-1">Nhà Cung Cấp *</label><input type="text" value={formMaster.supplierName} onChange={e => setFormMaster({...formMaster, supplierName: e.target.value})} disabled={!!formMaster.stockInId} className="w-full px-3 py-2 border rounded-lg"/></div>
                         
-                        {/* --- [FIX QUAN TRỌNG] Ô NHẬP MÃ NHÂN VIÊN ĐÃ MỞ KHÓA (KHÔNG CÒN DISABLED) --- */}
+                        {/* --- DROPDOWN CHỌN MÃ NHÂN VIÊN --- */}
                         <div>
                             <label className="text-xs font-bold uppercase block mb-1">Mã Nhân Viên *</label>
-                            <input 
-                                type="text" 
+                            <select 
                                 value={formMaster.employeeId} 
-                                onChange={e => setFormMaster({...formMaster, employeeId: e.target.value})} // Cho phép sửa
-                                className="w-full px-3 py-2 border rounded-lg font-bold text-gray-700 focus:border-blue-500 outline-none" 
-                                placeholder="VD: WH01"
-                            />
+                                onChange={e => setFormMaster({...formMaster, employeeId: e.target.value})}
+                                className="w-full px-3 py-2 border rounded-lg font-bold text-gray-700 focus:border-blue-500 outline-none"
+                            >
+                                <option value="">-- Chọn nhân viên --</option>
+                                <option value="OWNER">OWNER</option>
+                                {employees.map(emp => (
+                                    <option key={emp.employee_id} value={emp.employee_id}>
+                                        {emp.employee_id} - {emp.full_name}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                        {/* ------------------------------------------------------------------- */}
                     
                     </div>
                     <div className="flex gap-4 items-end mb-4 border-b pb-4">

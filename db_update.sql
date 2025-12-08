@@ -2130,6 +2130,25 @@ SET stock_quantity = (
 SET SQL_SAFE_UPDATES = 1;
 SELECT 'Đã hoàn tất cân bằng dữ liệu!' AS Message;
 
+-- ================================================================
+-- XÓA CÁC MÃ PHIẾU SAI FORMAT VÀ TẠO BẢNG SEQUENCE
+-- ================================================================
+SET SQL_SAFE_UPDATES = 0;
+
+-- Xóa các mã phiếu không đúng format SI#### (ví dụ: SI1733651234xxxx)
+DELETE FROM stock_in WHERE NOT (stock_in_id REGEXP '^SI[0-9]{4}$');
+
+-- Tạo bảng sequence để lưu counter cho stock_in_id
+CREATE TABLE IF NOT EXISTS `stock_in_sequence` (
+  `seq_key` VARCHAR(50) NOT NULL PRIMARY KEY,
+  `seq_value` INT UNSIGNED NOT NULL DEFAULT 0,
+  UNIQUE KEY `uk_seq_key` (`seq_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Khởi tạo giá trị sequence cho stock_in
+INSERT IGNORE INTO stock_in_sequence (seq_key, seq_value) 
+VALUES ('stock_in', (SELECT COALESCE(MAX(CAST(RIGHT(stock_in_id, 4) AS UNSIGNED)), 0) FROM stock_in WHERE stock_in_id REGEXP '^SI[0-9]{4}$'));
+
 SET SQL_SAFE_UPDATES = 1;
 SET FOREIGN_KEY_CHECKS = 1;
 

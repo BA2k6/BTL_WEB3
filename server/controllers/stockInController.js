@@ -91,6 +91,21 @@ const stockInController = {
             console.error("Lỗi getReceiptDetails:", error);
             res.status(500).json({ message: 'Lỗi server khi tải chi tiết phiếu.' });
         }
+    },
+
+    // 6. Xóa phiếu nhập (toàn bộ phiếu + chi tiết)
+    deleteStockInReceipt: async (req, res) => {
+        try {
+            const { id } = req.params;
+            if (!id) return res.status(400).json({ message: 'Thiếu mã phiếu nhập.' });
+
+            await stockInModel.deleteStockInReceipt(id);
+            res.status(200).json({ message: 'Xóa phiếu nhập thành công!' });
+        } catch (error) {
+            console.error("Lỗi deleteStockInReceipt:", error);
+            if (error.message.includes("không tồn tại")) return res.status(404).json({ message: error.message });
+            res.status(500).json({ message: 'Lỗi server: ' + error.message });
+        }
     }
 };
 
