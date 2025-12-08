@@ -132,7 +132,7 @@ const CheckoutScreen = ({ setPath, isLoggedIn, currentUser }) => {
     setIsPlacing(true);
     try {
       await createOrder(orderData);
-      alert('Đặt hàng thành công! Đơn đã gửi đến trang quản lý.');
+      alert('Bạn đã đặt hàng thành công');
       localStorage.removeItem('cart');
       try { window.dispatchEvent(new Event('cartUpdated')); } catch (e) {}
       setPath('/shop');

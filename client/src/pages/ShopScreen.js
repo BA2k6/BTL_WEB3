@@ -603,12 +603,22 @@ export const ShopScreen = ({ setPath, isLoggedIn, currentUser, onLogout }) => {
                                         <div className="mt-2 text-sm font-semibold text-gray-900 line-clamp-2">{item.name}</div>
                                         <div className="flex items-center justify-between mt-2">
                                             <span className="text-red-600 font-bold text-base">{formatCurrency(item.price)}</span>
+                                            <span className="text-[11px] text-gray-500">Đã bán {Math.max(1, (item.stock_quantity||item.stockQuantity||0) % 200)}</span>
+                                        </div>
+                                        <div className="mt-2 flex gap-2">
                                             <button
                                                 disabled={disabled}
                                                 onClick={(e)=>{e.stopPropagation(); if(disabled) return; startAddToCart(item);}}
-                                                className={`text-xs px-2 py-1 rounded ${disabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-orange-500 text-white'}`}
+                                                className={`flex-1 text-xs px-2 py-1 rounded font-semibold ${disabled ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-orange-50 text-orange-600 hover:bg-orange-500 hover:text-white transition'}`}
                                             >
-                                                Mua
+                                                Thêm giỏ
+                                            </button>
+                                            <button
+                                                disabled={disabled}
+                                                onClick={(e)=>{e.stopPropagation(); if(disabled) return; handleBuyNow(item);}}
+                                                className={`flex-1 text-xs px-2 py-1 rounded font-semibold ${disabled ? 'bg-gray-200 text-gray-500 cursor-not-allowed' : 'bg-emerald-500 text-white hover:bg-emerald-600 transition'}`}
+                                            >
+                                                Mua ngay
                                             </button>
                                         </div>
                                     </div>
